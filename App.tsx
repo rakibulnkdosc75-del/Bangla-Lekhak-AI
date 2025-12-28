@@ -25,8 +25,7 @@ import {
   MessageSquareQuote,
   X,
   FastForward,
-  Wand2,
-  Dices
+  Wand2
 } from 'lucide-react';
 import { StoryGenre, StoryLength, ChangeLevel, RegenTarget } from './types';
 import { generateBengaliStory, regenerateSection, continueStory } from './services/geminiService';
@@ -43,7 +42,7 @@ const QUICK_FEEDBACKS = [
   { label: 'সংলাপ যোগ', value: 'সংলাপ বা কথোপকথন বাড়িয়ে দাও' },
   { label: 'আরও অ্যাকশন', value: 'গল্পে আরও অ্যাকশন এবং রোমাঞ্চ যোগ করো' },
   { label: 'সংলাপ কমানো', value: 'সংলাপ কমিয়ে বর্ণনার ওপর জোর দাও' },
-  { label: 'গতি বৃদ্ধি', value: 'গল্পের গতিশীলতা ও পেসিং (pacing) আরও উন্নত করো' },
+  { label: 'গতি বৃদ্ধি', value: 'গল্পের গতিশীলতা ও পেসিং আরও উন্নত করো' },
   { label: 'গভীরতা বাড়ানো', value: 'চরিত্রের মনস্তাত্ত্বিক গভীরতা আরও স্পষ্টভাবে ফুটিয়ে তোলো' }
 ];
 
@@ -63,7 +62,6 @@ const App: React.FC = () => {
   const [showControls, setShowControls] = useState(false);
   const [showInstallGuide, setShowInstallGuide] = useState(false);
   
-  // Refinement states
   const [regenInstruction, setRegenInstruction] = useState('');
   const [continueInstruction, setContinueInstruction] = useState('');
   const [keywords, setKeywords] = useState('');
@@ -71,7 +69,6 @@ const App: React.FC = () => {
   const [regenTarget, setRegenTarget] = useState<RegenTarget>(RegenTarget.SELECTION);
   const [lastActionWasRegen, setLastActionWasRegen] = useState(false);
   
-  // History management
   const historyRef = useRef<string[]>(['']);
   const historyIndexRef = useRef(0);
   const [, forceUpdate] = useState({}); 
@@ -79,7 +76,6 @@ const App: React.FC = () => {
   const editorRef = useRef<HTMLDivElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
 
-  // PWA Install Prompt handling
   useEffect(() => {
     const handler = (e: any) => {
       e.preventDefault();
@@ -99,14 +95,16 @@ const App: React.FC = () => {
     }
   };
 
-  // Load draft on mount
   useEffect(() => {
     const saved = localStorage.getItem(STORAGE_KEY);
     if (saved) {
       try {
-        const { title: sTitle, content: sContent } = JSON.parse(saved);
+        const { title: sTitle, content: sContent, genre: sGenre, length: sLength, tone: sTone } = JSON.parse(saved);
         setTitle(sTitle || '');
         setContent(sContent || '');
+        setGenre(sGenre || StoryGenre.ROMANCE);
+        setLength(sLength || StoryLength.MEDIUM);
+        setTone(sTone || 'আবেগপ্রবণ (Emotional)');
         if (editorRef.current) {
           editorRef.current.innerText = sContent || '';
         }
@@ -118,13 +116,12 @@ const App: React.FC = () => {
     }
   }, []);
 
-  // Auto-save
   useEffect(() => {
     const timer = setTimeout(() => {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify({ title, content }));
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({ title, content, genre, length, tone }));
     }, 2000);
     return () => clearTimeout(timer);
-  }, [title, content]);
+  }, [title, content, genre, length, tone]);
 
   const pushToHistory = useCallback((newContent: string) => {
     if (newContent === historyRef.current[historyIndexRef.current]) return;
@@ -138,19 +135,21 @@ const App: React.FC = () => {
 
   const handleManualSave = useCallback(() => {
     setIsSaving(true);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ title, content }));
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ title, content, genre, length, tone }));
     setTimeout(() => {
       setIsSaving(false);
       setSaveSuccess(true);
       setTimeout(() => setSaveSuccess(false), 2000);
     }, 500);
-  }, [title, content]);
+  }, [title, content, genre, length, tone]);
 
   const updateEditorDOM = (newVal: string) => {
-    if (editorRef.current && editorRef.current.innerText !== newVal) {
-      editorRef.current.innerText = newVal;
+    if (editorRef.current) {
+      if (editorRef.current.innerText !== newVal) {
+        editorRef.current.innerText = newVal || '';
+      }
     }
-    setContent(newVal);
+    setContent(newVal || '');
   };
 
   const undo = useCallback(() => {
@@ -237,15 +236,12 @@ const App: React.FC = () => {
   const getParagraphAtCursor = () => {
     const selection = window.getSelection();
     if (!selection || !editorRef.current || selection.rangeCount === 0) return null;
-    
     const range = selection.getRangeAt(0);
     const fullText = editorRef.current.innerText;
-    
     let preSelectionRange = range.cloneRange();
     preSelectionRange.selectNodeContents(editorRef.current);
     preSelectionRange.setEnd(range.startContainer, range.startOffset);
     const startOffset = preSelectionRange.toString().length;
-
     const paragraphs = fullText.split(/\n\s*\n/);
     let currentLen = 0;
     for (let i = 0; i < paragraphs.length; i++) {
@@ -262,14 +258,11 @@ const App: React.FC = () => {
   const handleRegenerate = async (overrideInstruction?: string) => {
     const instructionToUse = overrideInstruction || regenInstruction;
     if (!instructionToUse.trim() || !content) return;
-    
     setIsRegenerating(true);
-    
     try {
       const selection = window.getSelection();
       let targetText = "";
       let mode: 'selection' | 'paragraph' | 'all' = 'selection';
-
       if (regenTarget === RegenTarget.ALL) {
         targetText = content;
         mode = 'all';
@@ -291,9 +284,7 @@ const App: React.FC = () => {
         }
         mode = 'selection';
       }
-      
       const newText = await regenerateSection(targetText, instructionToUse, changeLevel, keywords, lastActionWasRegen);
-      
       let updatedFullContent = "";
       if (mode === 'selection' && selection && selection.rangeCount > 0) {
         const range = selection.getRangeAt(0);
@@ -312,7 +303,6 @@ const App: React.FC = () => {
         updatedFullContent = newText;
         updateEditorDOM(updatedFullContent);
       }
-
       setContent(updatedFullContent);
       pushToHistory(updatedFullContent);
       setRegenInstruction('');
@@ -351,108 +341,59 @@ const App: React.FC = () => {
 
   return (
     <div className="min-h-screen flex flex-col md:flex-row bg-[#fdfbf7] text-gray-800 antialiased mobile-safe-area">
-      {/* Sidebar */}
       <aside className="w-full md:w-80 bg-white border-r border-gray-200 p-6 flex-shrink-0 shadow-sm overflow-y-auto h-auto md:h-screen md:sticky md:top-0 z-20">
         <div className="flex items-center justify-between mb-8 select-none">
           <div className="flex items-center gap-2">
             <BookOpen className="text-indigo-600 w-8 h-8" />
             <h1 className="text-2xl font-bold text-gray-900 bn-font tracking-tight">বাংলা লেখক AI</h1>
           </div>
-          <button 
-            onClick={handleInstallClick}
-            className="md:hidden p-2 bg-indigo-600 text-white rounded-full animate-bounce shadow-lg"
-          >
+          <button onClick={handleInstallClick} className="md:hidden p-2 bg-indigo-600 text-white rounded-full animate-bounce shadow-lg">
             <Smartphone className="w-5 h-5" />
           </button>
         </div>
-
         <div className="space-y-6">
-          <button 
-            onClick={handleInstallClick}
-            className="hidden md:flex w-full items-center justify-center gap-2 py-3 px-4 bg-indigo-50 text-indigo-700 border border-indigo-200 rounded-xl font-bold hover:bg-indigo-100 transition-all mb-4"
-          >
-            <Smartphone className="w-5 h-5" />
-            অ্যাপ ইনস্টল করুন
+          <button onClick={handleInstallClick} className="hidden md:flex w-full items-center justify-center gap-2 py-3 px-4 bg-indigo-50 text-indigo-700 border border-indigo-200 rounded-xl font-bold hover:bg-indigo-100 transition-all mb-4">
+            <Smartphone className="w-5 h-5" /> অ্যাপ ইনস্টল করুন
           </button>
-
           <section>
-            <label className="block text-xs font-bold mb-2 text-gray-400 uppercase tracking-widest bn-font">গল্পের ধরণ (Genre)</label>
-            <select 
-              value={genre}
-              onChange={(e) => setGenre(e.target.value as StoryGenre)}
-              className={`w-full p-3 border rounded-xl focus:ring-2 focus:ring-indigo-500 transition-all outline-none text-sm font-medium ${genre === StoryGenre.ADULT ? 'bg-red-50 border-red-200 text-red-700' : 'bg-gray-50 border-gray-200 text-gray-800'}`}
-            >
-              {Object.values(StoryGenre).map(g => (
-                <option key={g} value={g}>{g}</option>
-              ))}
+            <label className="block text-xs font-bold mb-2 text-gray-400 uppercase tracking-widest bn-font">গল্পের ধরণ</label>
+            <select value={genre} onChange={(e) => setGenre(e.target.value as StoryGenre)} className={`w-full p-3 border rounded-xl focus:ring-2 focus:ring-indigo-500 transition-all outline-none text-sm font-medium ${genre.includes("Adult") ? 'bg-red-50 border-red-200 text-red-700' : 'bg-gray-50 border-gray-200 text-gray-800'}`}>
+              {Object.values(StoryGenre).map(g => <option key={g} value={g}>{g}</option>)}
             </select>
           </section>
-
           <section>
-            <label className="block text-xs font-bold mb-2 text-gray-400 uppercase tracking-widest bn-font">দৈর্ঘ্য (Length)</label>
-            <select 
-              value={length}
-              onChange={(e) => setLength(e.target.value as StoryLength)}
-              className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 transition-all outline-none text-sm font-medium"
-            >
+            <label className="block text-xs font-bold mb-2 text-gray-400 uppercase tracking-widest bn-font">দৈর্ঘ্য</label>
+            <select value={length} onChange={(e) => setLength(e.target.value as StoryLength)} className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 transition-all outline-none text-sm font-medium">
               {Object.values(StoryLength).map(l => <option key={l} value={l}>{l}</option>)}
             </select>
           </section>
-
           <section>
-            <label className="block text-xs font-bold mb-2 text-gray-400 uppercase tracking-widest bn-font">মেজাজ ও টোন (Tone)</label>
-            <input 
-              type="text"
-              value={tone}
-              onChange={(e) => setTone(e.target.value)}
-              className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 transition-all outline-none text-sm bn-font"
-            />
+            <label className="block text-xs font-bold mb-2 text-gray-400 uppercase tracking-widest bn-font">মেজাজ ও টোন</label>
+            <input type="text" value={tone} onChange={(e) => setTone(e.target.value)} className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 transition-all outline-none text-sm bn-font" />
           </section>
-
           <section className="pt-4 border-t border-gray-100">
-            <label className="block text-xs font-bold mb-2 text-gray-400 uppercase tracking-widest bn-font">গল্পের কাহিনী (Plot/Prompt)</label>
-            <textarea 
-              value={prompt}
-              onChange={(e) => setPrompt(e.target.value)}
-              placeholder="আপনার গল্পের মূল ভাবনা এখানে লিখুন..."
-              rows={5}
-              className="w-full p-4 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 transition-all outline-none resize-none text-sm bn-font"
-            />
-            <button 
-              onClick={handleGenerate}
-              disabled={loading || !prompt.trim()}
-              className="w-full mt-4 bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-4 px-4 rounded-2xl flex items-center justify-center gap-3 transition-all disabled:opacity-50 shadow-xl shadow-indigo-100 active:scale-95 border-b-4 border-indigo-800"
-            >
+            <label className="block text-xs font-bold mb-2 text-gray-400 uppercase tracking-widest bn-font">গল্পের কাহিনী (Plot)</label>
+            <textarea value={prompt} onChange={(e) => setPrompt(e.target.value)} placeholder="আপনার গল্পের মূল ভাবনা এখানে লিখুন..." rows={5} className="w-full p-4 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 transition-all outline-none resize-none text-sm bn-font" />
+            <button onClick={handleGenerate} disabled={loading || !prompt.trim()} className="w-full mt-4 bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-4 px-4 rounded-2xl flex items-center justify-center gap-3 transition-all disabled:opacity-50 shadow-xl shadow-indigo-100 active:scale-95 border-b-4 border-indigo-800">
               {loading ? <Loader2 className="animate-spin w-5 h-5" /> : <PlusCircle className="w-5 h-5" />}
               <span className="bn-font text-lg">গল্প তৈরি করুন</span>
             </button>
           </section>
         </div>
       </aside>
-
-      {/* Main Content Area */}
       <main className="flex-1 flex flex-col p-2 md:p-8 overflow-x-hidden relative">
-        <div className="max-w-4xl mx-auto w-full flex flex-col flex-1 bg-white md:rounded-3xl shadow-2xl border border-gray-100 overflow-hidden relative">
-          
+        <div className="max-w-4xl mx-auto w-full flex flex-col flex-1 bg-white md:rounded-3xl shadow-2xl border border-gray-100 overflow-hidden relative fade-in">
           <header className="px-4 md:px-6 py-4 border-b border-gray-100 flex flex-wrap items-center justify-between gap-4 bg-white/80 backdrop-blur-md sticky top-0 z-20">
-            <input 
-              type="text"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              placeholder="গল্পের নাম..."
-              className="flex-1 text-xl md:text-2xl font-black bg-transparent outline-none bn-font text-gray-800 placeholder-gray-200"
-            />
+            <input type="text" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="গল্পের নাম..." className="flex-1 text-xl md:text-2xl font-black bg-transparent outline-none bn-font text-gray-800 placeholder-gray-200" />
             <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar">
               <button onClick={handleManualSave} disabled={isSaving} className={`flex items-center gap-2 px-3 py-2 rounded-xl border transition-all ${saveSuccess ? 'bg-green-50 text-green-600 border-green-200' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'}`}>
                 {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : saveSuccess ? <CheckCircle className="w-4 h-4" /> : <Save className="w-4 h-4" />}
                 <span className="text-xs font-bold hidden sm:block">সেভ</span>
               </button>
-
               <div className="flex bg-gray-50 p-1 rounded-xl">
                 <button onClick={undo} disabled={historyIndexRef.current === 0} className="p-2 hover:bg-white hover:shadow-sm rounded-lg text-gray-500 disabled:opacity-20 transition-all"><Undo2 className="w-4 h-4" /></button>
                 <button onClick={redo} disabled={historyIndexRef.current >= historyRef.current.length - 1} className="p-2 hover:bg-white hover:shadow-sm rounded-lg text-gray-500 disabled:opacity-20 transition-all"><Redo2 className="w-4 h-4" /></button>
               </div>
-              
               <div className="flex items-center gap-1.5">
                 <button onClick={() => exportToPdf(title, content)} className="p-2.5 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 rounded-xl transition-all border border-indigo-100"><Download className="w-4 h-4" /></button>
                 <button onClick={() => exportToWord(title, content)} className="p-2.5 bg-blue-50 text-blue-700 hover:bg-blue-100 rounded-xl transition-all border border-blue-100"><FileText className="w-4 h-4" /></button>
@@ -461,137 +402,66 @@ const App: React.FC = () => {
               </div>
             </div>
           </header>
-
           <div className="flex-1 flex flex-col relative overflow-hidden bg-white">
-            <div 
-              className="flex-1 p-4 md:p-12 overflow-y-auto scroll-smooth"
-              style={{ paddingBottom: showControls ? '480px' : '80px' }}
-            >
-              <div 
-                ref={editorRef}
-                contentEditable
-                onInput={handleContentChange}
-                onFocus={handleEditorFocus}
-                onBlur={handleEditorBlur}
-                placeholder="এখানে আপনার গল্প লিখুন বা বাম দিক থেকে তৈরি করুন..."
-                spellCheck={false}
-                suppressContentEditableWarning={true}
-                className="w-full text-lg md:text-xl leading-[2] outline-none bn-font whitespace-pre-wrap min-h-full text-gray-700 selection:bg-indigo-100"
-              />
-
-              {!showControls && (
+            <div className="flex-1 p-4 md:p-12 overflow-y-auto scroll-smooth" style={{ paddingBottom: showControls ? '480px' : '100px' }}>
+              <div ref={editorRef} contentEditable onInput={handleContentChange} onFocus={handleEditorFocus} onBlur={handleEditorBlur} placeholder="এখানে আপনার গল্প লিখুন বা তৈরি করুন..." spellCheck={false} suppressContentEditableWarning={true} className="w-full text-lg md:text-xl leading-[2.2] outline-none bn-font whitespace-pre-wrap min-h-full text-gray-700 selection:bg-indigo-100" />
+              {!showControls && content && (
                 <div className="mt-8 pt-6 border-t border-gray-50 flex flex-wrap items-center gap-4 md:gap-6 text-[10px] text-gray-400 font-bold uppercase tracking-widest select-none">
                   <span className="flex items-center gap-1.5"><Clock className="w-3 h-3" /> {readingTime} মিনিট পড়া</span>
                   <span>{wordCount} শব্দ</span>
-                  <span className="flex items-center gap-1.5 ml-auto opacity-60"><Save className="w-3 h-3" /> স্বয়ংক্রিয় সেভ হচ্ছে</span>
+                  <span className="flex items-center gap-1.5 ml-auto opacity-60"><Save className="w-3 h-3" /> সংরক্ষিত হচ্ছে</span>
                 </div>
               )}
             </div>
-
-            {/* AI Controls Panel */}
             {content && (
-              <div 
-                ref={panelRef}
-                className={`absolute bottom-0 left-0 right-0 z-30 transition-all duration-500 ease-in-out transform ${
-                  showControls ? 'translate-y-0 opacity-100 pointer-events-auto' : 'translate-y-full opacity-0 pointer-events-none'
-                }`}
-              >
-                <div className="m-4 md:m-6 p-4 md:p-6 bg-white/95 backdrop-blur-xl border border-indigo-100 rounded-3xl shadow-[0_-20px_50px_-20px_rgba(79,70,229,0.3)]">
+              <div ref={panelRef} className={`absolute bottom-0 left-0 right-0 z-30 transition-all duration-500 ease-in-out transform ${showControls ? 'translate-y-0 opacity-100 pointer-events-auto' : 'translate-y-full opacity-0 pointer-events-none'}`}>
+                <div className="m-4 md:m-6 p-4 md:p-6 bg-white/95 backdrop-blur-xl border border-indigo-100 rounded-[2.5rem] shadow-[0_-20px_50px_-20px_rgba(79,70,229,0.3)]">
                   <div className="flex flex-col gap-4">
-                    {/* Header */}
                     <div className="flex items-center justify-between border-b border-gray-100 pb-3">
                       <div className="flex gap-4">
                         <button className="flex items-center gap-2 text-indigo-600 font-black text-xs uppercase bn-font">
                           <Wand2 className="w-4 h-4" /> এআই কন্ট্রোল সেন্টার
                         </button>
                       </div>
-                      <button onClick={() => setShowControls(false)} className="p-1.5 hover:bg-gray-100 rounded-lg text-gray-400">
-                        <ChevronDown className="w-4 h-4" />
-                      </button>
+                      <button onClick={() => setShowControls(false)} className="p-1.5 hover:bg-gray-100 rounded-lg text-gray-400"><ChevronDown className="w-4 h-4" /></button>
                     </div>
-
                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                      {/* Left Side: Refinement & Common Feedback */}
                       <div className="space-y-4 pr-0 lg:pr-6 lg:border-r lg:border-gray-100">
                         <div className="flex flex-col gap-3">
-                          <span className="text-[9px] text-gray-400 font-bold uppercase bn-font flex items-center gap-1.5">
-                            <MessageSquareQuote className="w-3.5 h-3.5" /> দ্রুত ফিডব্যাক অপশন
-                          </span>
+                          <span className="text-[9px] text-gray-400 font-bold uppercase bn-font flex items-center gap-1.5"><MessageSquareQuote className="w-3.5 h-3.5" /> দ্রুত ফিডব্যাক</span>
                           <div className="flex flex-wrap gap-2">
-                            {QUICK_FEEDBACKS.map(fb => (
-                              <button 
-                                key={fb.label}
-                                onClick={() => {
-                                  setRegenInstruction(fb.value);
-                                  handleRegenerate(fb.value);
-                                }}
-                                className="whitespace-nowrap px-3 py-1.5 bg-indigo-50/50 hover:bg-indigo-600 hover:text-white text-indigo-600 text-[10px] font-bold rounded-xl border border-indigo-100 transition-all active:scale-95 flex items-center gap-1.5"
-                              >
-                                {fb.label}
-                              </button>
-                            ))}
+                            {QUICK_FEEDBACKS.map(fb => <button key={fb.label} onClick={() => { setRegenInstruction(fb.value); handleRegenerate(fb.value); }} className="whitespace-nowrap px-3 py-1.5 bg-indigo-50/50 hover:bg-indigo-600 hover:text-white text-indigo-600 text-[10px] font-bold rounded-xl border border-indigo-100 transition-all active:scale-95">{fb.label}</button>)}
                           </div>
                         </div>
-
                         <div className="flex flex-wrap items-center justify-between gap-4 pt-2">
                           <div className="flex flex-col gap-1.5">
-                            <span className="text-[9px] text-gray-400 font-bold uppercase bn-font">টার্গেট এলাকা</span>
+                            <span className="text-[9px] text-gray-400 font-bold uppercase bn-font">টার্গেট</span>
                             <div className="flex bg-gray-100/50 p-1 rounded-2xl">
-                              <button onClick={() => setRegenTarget(RegenTarget.SELECTION)} className={`px-4 py-2 rounded-xl text-[10px] font-bold transition-all ${regenTarget === RegenTarget.SELECTION ? 'bg-white text-indigo-600 shadow-sm border border-indigo-50' : 'text-gray-500'}`}>সিলেকশন</button>
-                              <button onClick={() => setRegenTarget(RegenTarget.PARAGRAPH)} className={`px-4 py-2 rounded-xl text-[10px] font-bold transition-all ${regenTarget === RegenTarget.PARAGRAPH ? 'bg-white text-indigo-600 shadow-sm border border-indigo-50' : 'text-gray-500'}`}>প্যারাগ্রাফ</button>
-                              <button onClick={() => setRegenTarget(RegenTarget.ALL)} className={`px-4 py-2 rounded-xl text-[10px] font-bold transition-all ${regenTarget === RegenTarget.ALL ? 'bg-white text-indigo-600 shadow-sm border border-indigo-50' : 'text-gray-500'}`}>সম্পূর্ণ</button>
+                              {Object.values(RegenTarget).map(t => <button key={t} onClick={() => setRegenTarget(t)} className={`px-4 py-2 rounded-xl text-[10px] font-bold transition-all ${regenTarget === t ? 'bg-white text-indigo-600 shadow-sm border border-indigo-50' : 'text-gray-500'}`}>{t === RegenTarget.SELECTION ? 'সিলেকশন' : t === RegenTarget.PARAGRAPH ? 'প্যারাগ্রাফ' : 'সম্পূর্ণ'}</button>)}
                             </div>
                           </div>
                           <div className="flex flex-col gap-1.5">
-                            <span className="text-[9px] text-gray-400 font-bold uppercase bn-font">পরিবর্তন মাত্রা</span>
+                            <span className="text-[9px] text-gray-400 font-bold uppercase bn-font">পরিবর্তন</span>
                             <div className="flex bg-gray-100/50 p-1 rounded-2xl">
                               <button onClick={() => setChangeLevel(ChangeLevel.SLIGHT)} className={`px-4 py-2 rounded-xl text-[10px] font-bold transition-all ${changeLevel === ChangeLevel.SLIGHT ? 'bg-white text-indigo-600 shadow-sm border border-indigo-50' : 'text-gray-500'}`}>সামান্য</button>
                               <button onClick={() => setChangeLevel(ChangeLevel.MAJOR)} className={`px-4 py-2 rounded-xl text-[10px] font-bold transition-all ${changeLevel === ChangeLevel.MAJOR ? 'bg-white text-indigo-600 shadow-sm border border-indigo-50' : 'text-gray-500'}`}>আমূল</button>
                             </div>
                           </div>
                         </div>
-
                         <div className="flex gap-2">
-                          <input 
-                            type="text"
-                            value={regenInstruction}
-                            onChange={(e) => setRegenInstruction(e.target.value)}
-                            placeholder="এখানে আপনার নিজস্ব নির্দেশনা লিখুন..."
-                            className="flex-1 px-4 py-3 bg-gray-50/50 border border-gray-100 rounded-2xl focus:ring-2 focus:ring-indigo-500 transition-all outline-none text-xs bn-font shadow-inner"
-                          />
-                          <button 
-                            onClick={() => handleRegenerate()}
-                            disabled={isRegenerating || !regenInstruction.trim()}
-                            className="bg-indigo-600 text-white p-3.5 rounded-2xl shadow-lg active:scale-95 disabled:opacity-50 transition-all hover:bg-indigo-700"
-                            title="Apply Feedback"
-                          >
+                          <input type="text" value={regenInstruction} onChange={(e) => setRegenInstruction(e.target.value)} placeholder="নির্দেশনা দিন..." className="flex-1 px-4 py-3 bg-gray-50/50 border border-gray-100 rounded-2xl focus:ring-2 focus:ring-indigo-500 transition-all outline-none text-xs bn-font shadow-inner" onKeyDown={(e) => e.key === 'Enter' && handleRegenerate()} />
+                          <button onClick={() => handleRegenerate()} disabled={isRegenerating || !regenInstruction.trim()} className="bg-indigo-600 text-white p-3.5 rounded-2xl shadow-lg active:scale-95 disabled:opacity-50 transition-all hover:bg-indigo-700">
                             {isRegenerating ? <Loader2 className="w-5 h-5 animate-spin" /> : <RefreshCw className="w-5 h-5" />}
                           </button>
                         </div>
                       </div>
-
-                      {/* Right Side: Continue Story */}
                       <div className="space-y-5 lg:pl-2">
-                        <span className="text-[9px] text-orange-500 font-bold uppercase bn-font flex items-center gap-1.5">
-                          <FastForward className="w-3.5 h-3.5" /> কাহিনী বিস্তার (Continuation)
-                        </span>
+                        <span className="text-[9px] text-orange-500 font-bold uppercase bn-font flex items-center gap-1.5"><FastForward className="w-3.5 h-3.5" /> কাহিনী বিস্তার</span>
                         <div className="p-4 bg-orange-50/50 border border-orange-100 rounded-2xl space-y-3 shadow-sm">
-                          <p className="text-[10px] text-orange-700/70 bn-font leading-relaxed font-medium">
-                            গল্পের প্রবাহ বজায় রেখে নতুন অংশ যোগ করুন। আপনি চাইলে নির্দিষ্ট কোনো মোড় (plot twist) সম্পর্কে এআই-কে সংকেত দিতে পারেন।
-                          </p>
-                          <textarea 
-                            value={continueInstruction}
-                            onChange={(e) => setContinueInstruction(e.target.value)}
-                            placeholder="পরবর্তী অংশ কেমন হবে? (উদা: 'একটি রহস্যময় চিঠি আসবে')"
-                            rows={3}
-                            className="w-full px-4 py-3 bg-white border border-orange-100 rounded-2xl focus:ring-2 focus:ring-orange-500 transition-all outline-none text-xs bn-font resize-none shadow-sm"
-                          />
+                          <p className="text-[10px] text-orange-700/70 bn-font leading-relaxed font-medium">গল্পের ধারা বজায় রেখে পরবর্তী অংশ যোগ করুন।</p>
+                          <textarea value={continueInstruction} onChange={(e) => setContinueInstruction(e.target.value)} placeholder="পরবর্তী ঘটনা কেমন হবে?" rows={3} className="w-full px-4 py-3 bg-white border border-orange-100 rounded-2xl focus:ring-2 focus:ring-orange-500 transition-all outline-none text-xs bn-font resize-none shadow-sm" />
                         </div>
-                        <button 
-                          onClick={handleContinue}
-                          disabled={isContinuing || !content.trim()}
-                          className="w-full bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 text-white font-black py-4 rounded-2xl transition-all shadow-xl shadow-orange-100 active:scale-[0.98] disabled:opacity-50 flex items-center justify-center gap-3 border-b-4 border-orange-800"
-                        >
+                        <button onClick={handleContinue} disabled={isContinuing || !content.trim()} className="w-full bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 text-white font-black py-4 rounded-2xl transition-all shadow-xl shadow-orange-100 active:scale-[0.98] disabled:opacity-50 flex items-center justify-center gap-3 border-b-4 border-orange-800">
                           {isContinuing ? <Loader2 className="w-5 h-5 animate-spin" /> : <FastForward className="w-5 h-5" />}
                           <span className="bn-font text-base">গল্প এগিয়ে নিয়ে যান</span>
                         </button>
@@ -601,36 +471,25 @@ const App: React.FC = () => {
                 </div>
               </div>
             )}
-
             {content && !showControls && (
-              <button 
-                onClick={() => editorRef.current?.focus()}
-                className="absolute bottom-6 left-1/2 -translate-x-1/2 bg-white/90 backdrop-blur-md px-6 py-3 rounded-full border border-indigo-100 shadow-2xl text-[11px] font-black text-indigo-600 flex items-center gap-2.5 hover:bg-white hover:-translate-y-1 transition-all z-20 group"
-              >
-                <Sparkles className="w-4 h-4 group-hover:animate-spin-slow" /> স্মার্ট কন্ট্রোল ও কন্টিনিউ <ChevronUp className="w-4 h-4" />
+              <button onClick={() => editorRef.current?.focus()} className="absolute bottom-6 left-1/2 -translate-x-1/2 bg-white/90 backdrop-blur-md px-6 py-3 rounded-full border border-indigo-100 shadow-2xl text-[11px] font-black text-indigo-600 flex items-center gap-2.5 hover:bg-white hover:-translate-y-1 transition-all z-20 group">
+                <Sparkles className="w-4 h-4 group-hover:animate-bounce" /> এডিট কন্ট্রোল খুলুন <ChevronUp className="w-4 h-4" />
               </button>
             )}
           </div>
         </div>
-
-        {/* Installation Guide Modal */}
         {showInstallGuide && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
             <div className="bg-white rounded-[2rem] p-10 max-w-sm w-full shadow-2xl relative border border-gray-100">
-              <button onClick={() => setShowInstallGuide(false)} className="absolute top-6 right-6 text-gray-300 hover:text-gray-500 transition-colors">
-                <X className="w-6 h-6" />
-              </button>
+              <button onClick={() => setShowInstallGuide(false)} className="absolute top-6 right-6 text-gray-300 hover:text-gray-500 transition-colors"><X className="w-6 h-6" /></button>
               <div className="text-center">
-                <div className="bg-indigo-50 w-20 h-20 rounded-3xl flex items-center justify-center mx-auto mb-6 shadow-sm">
-                  <Smartphone className="w-10 h-10 text-indigo-600" />
-                </div>
+                <div className="bg-indigo-50 w-20 h-20 rounded-3xl flex items-center justify-center mx-auto mb-6 shadow-sm"><Smartphone className="w-10 h-10 text-indigo-600" /></div>
                 <h3 className="text-2xl font-black mb-4 bn-font text-gray-900">অ্যাপটি ইনস্টল করুন</h3>
                 <div className="text-left space-y-4 text-sm text-gray-600 bn-font leading-relaxed">
-                  <p>আপনার মোবাইল ডিভাইসে সরাসরি এই অ্যাপটি ব্যবহার করতে নিচের ধাপগুলো অনুসরণ করুন:</p>
+                  <p>আপনার মোবাইল ডিভাইসে সরাসরি এই অ্যাপটি ব্যবহার করতে:</p>
                   <ol className="list-decimal list-inside space-y-3 font-medium">
-                    <li className="pl-2 border-l-2 border-indigo-100">ব্রাউজারের <span className="text-indigo-600">শেয়ার</span> বা <span className="text-indigo-600">মেনু</span> আইকনে চাপ দিন।</li>
-                    <li className="pl-2 border-l-2 border-indigo-100"><strong>"Add to Home Screen"</strong> বা <strong>"Install App"</strong> খুঁজে বের করুন।</li>
-                    <li className="pl-2 border-l-2 border-indigo-100">অ্যাড বাটনে ক্লিক করলেই আপনার ফোনে অ্যাপটি চলে আসবে।</li>
+                    <li>ব্রাউজারের মেনু বা শেয়ার বাটনে ক্লিক করুন।</li>
+                    <li><strong>"Add to Home Screen"</strong> বা <strong>"Install App"</strong> সিলেক্ট করুন।</li>
                   </ol>
                 </div>
                 <button onClick={() => setShowInstallGuide(false)} className="mt-10 w-full py-4 bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl font-black bn-font transition-all shadow-lg active:scale-95">বুঝেছি</button>
@@ -638,29 +497,11 @@ const App: React.FC = () => {
             </div>
           </div>
         )}
-
         <footer className="mt-8 text-center text-[10px] text-gray-400 bn-font mb-10 select-none">
-          <div className="flex items-center justify-center gap-3 mb-2 opacity-50">
-            <Sparkles className="w-3 h-3" />
-            <div className="h-px w-20 bg-gray-200"></div>
-            <BookOpen className="w-3 h-3" />
-            <div className="h-px w-20 bg-gray-200"></div>
-            <Zap className="w-3 h-3" />
-          </div>
-          বাংলা লেখক AI v3.7 • প্রফেশনাল সাহিত্যিক এআই টুল • {new Date().getFullYear()}
+          বাংলা লেখক AI v3.8 • {new Date().getFullYear()}
         </footer>
       </main>
-      <style>{`
-        .no-scrollbar::-webkit-scrollbar { display: none; } 
-        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
-        @keyframes spin-slow {
-          from { transform: rotate(0deg); }
-          to { transform: rotate(360deg); }
-        }
-        .animate-spin-slow {
-          animation: spin-slow 8s linear infinite;
-        }
-      `}</style>
+      <style>{`.no-scrollbar::-webkit-scrollbar { display: none; } .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }`}</style>
     </div>
   );
 };
