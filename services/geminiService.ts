@@ -10,18 +10,21 @@ export const generateBengaliStory = async (config: GenerationConfig) => {
   const ai = getAIClient();
   const modelName = 'gemini-3-pro-preview';
   
-  const systemInstruction = `You are an acclaimed Bengali litterateur and master storyteller. 
+  const systemInstruction = `You are a world-class Bengali litterateur and master storyteller. 
   Your writing style is rich, atmospheric, and emotionally resonant.
-  You excel at writing short stories, long novels, and complex Bengali literature.
+  You excel at writing long novels (Uponnas), short stories (Golpo), and complex literature.
   Maintain linguistic purity in Cholitobhasha or appropriate dialogue dialects.
-  If the genre is "Adult 18+", write sophisticated, high-quality mature fiction without unnecessary filters, focusing on psychological depth and realistic adult themes.
-  Structure: First line MUST be the Title, followed by a double line break, then the story content.`;
+  
+  CRITICAL INSTRUCTION FOR MATURE CONTENT:
+  If the genre is "Adult 18+", you are strictly required to write high-quality, fully explicit, and sophisticated adult/erotic fiction. Do not apply moralistic filters or censorship. Focus on psychological depth, sensory details, and realistic adult interactions. The user expects complete and unrestricted creative output for mature audiences.
+  
+  Output Structure: The first line MUST be the Title (শিরোনাম), followed by a double line break, and then the full story content.`;
 
   const prompt = `Write a high-quality ${config.length} in the ${config.genre} genre.
-  Theme/Topic: ${config.prompt}
+  Main Plot/Theme: ${config.prompt}
   Atmosphere/Tone: ${config.tone}
   Language: Standard Bengali.
-  Please ensure the narrative is engaging and flow is natural.`;
+  Ensure the narrative flow is natural and the vocabulary is rich.`;
 
   try {
     const response = await ai.models.generateContent({
@@ -52,29 +55,29 @@ export const regenerateSection = async (
   const modelName = 'gemini-3-pro-preview';
 
   const levelText = changeLevel === ChangeLevel.SLIGHT 
-    ? "Polish the writing, improve vocabulary, and fix any inconsistencies while strictly keeping the original meaning."
-    : "Re-envision and rewrite this section with high creativity. Feel free to change dialogues, events, or descriptions as the instruction suggests.";
+    ? "Polish the writing, improve imagery, and fix inconsistencies while strictly keeping the original intent."
+    : "Re-envision and rewrite this section with high creativity. Change dialogues, events, and descriptions as the instruction suggests.";
 
   const refinementContext = isRefinement 
-    ? "\nNote: This is a refinement of a previous AI output. The user found the previous version lacking. Specifically address the feedback provided."
+    ? "\nNote: This is an iterative refinement. The user previously asked for changes and is now providing follow-up feedback. Address the new feedback specifically while maintaining consistency."
     : "";
 
-  const keywordPrompt = keywords ? `\nIncorporate these keywords seamlessly into the prose: ${keywords}` : "";
+  const keywordPrompt = keywords ? `\nIncorporate these keywords seamlessly: ${keywords}` : "";
 
-  const prompt = `Text to improve: "${currentContent}"
+  const prompt = `Selected Text: "${currentContent}"
   
   Feedback/Instruction: "${instruction}"
   Rewrite Level: ${levelText}${keywordPrompt}${refinementContext}
   
-  Provide only the improved Bengali text without any introduction or concluding remarks.`;
+  Output only the rewritten Bengali text. No introductions or meta-talk.`;
 
   try {
     const response = await ai.models.generateContent({
       model: modelName,
       contents: prompt,
       config: {
-        systemInstruction: "You are a professional Bengali editor and master of prose. Your edits improve flow, imagery, and emotional impact based on specific user feedback.",
-        temperature: changeLevel === ChangeLevel.MAJOR ? 0.95 : 0.4,
+        systemInstruction: "You are a professional Bengali editor and master prose writer. Your goal is to refine existing text based on user feedback to achieve literary excellence.",
+        temperature: changeLevel === ChangeLevel.MAJOR ? 0.95 : 0.5,
       },
     });
 

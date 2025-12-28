@@ -3,12 +3,13 @@
 <html lang="bn">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>Bangla Lekhak AI - Bengali Story Writer</title>
     <link rel="manifest" href="manifest.json">
     <meta name="theme-color" content="#4f46e5">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Bangla AI">
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@300;400;500;600;700&family=Noto+Sans+Bengali:wght@400;700&display=swap" rel="stylesheet">
     <style>
@@ -16,11 +17,11 @@
             font-family: 'Hind Siliguri', 'Noto Sans Bengali', sans-serif;
             background-color: #fdfbf7;
             overscroll-behavior-y: contain;
+            -webkit-tap-highlight-color: transparent;
         }
         .bn-font {
             font-family: 'Hind Siliguri', sans-serif;
         }
-        /* Custom scrollbar for a cleaner app look */
         ::-webkit-scrollbar {
             width: 6px;
         }
@@ -39,6 +40,11 @@
                 padding-bottom: env(safe-area-inset-bottom);
             }
         }
+        [contenteditable]:empty:before {
+            content: attr(placeholder);
+            color: #cbd5e1;
+            cursor: text;
+        }
     </style>
 <script type="importmap">
 {
@@ -54,5 +60,12 @@
 </head>
 <body>
     <div id="root"></div>
+    <script>
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('./sw.js').catch(err => console.log('SW registration failed:', err));
+            });
+        }
+    </script>
 </body>
 </html>
