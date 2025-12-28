@@ -62,3 +62,21 @@ export const exportToWord = (title: string, content: string) => {
   link.click();
   document.body.removeChild(link);
 };
+
+/**
+ * Export to .txt format (Plain Text) using a data blob.
+ */
+export const exportToTxt = (title: string, content: string) => {
+  const textContent = `${title}\n\n${content}`;
+  const blob = new Blob(['\ufeff', textContent], {
+    type: 'text/plain;charset=utf-8'
+  });
+  
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `${title || 'Bengali_Story'}.txt`;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+};

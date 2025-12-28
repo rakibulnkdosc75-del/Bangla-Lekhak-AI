@@ -45,7 +45,8 @@ export const regenerateSection = async (
   currentContent: string, 
   instruction: string, 
   changeLevel: ChangeLevel,
-  keywords?: string
+  keywords?: string,
+  isRefinement: boolean = false
 ) => {
   const ai = getAIClient();
   const modelName = 'gemini-3-pro-preview';
@@ -54,12 +55,16 @@ export const regenerateSection = async (
     ? "Polish the writing, improve vocabulary, and fix any inconsistencies while strictly keeping the original meaning."
     : "Re-envision and rewrite this section with high creativity. Feel free to change dialogues, events, or descriptions as the instruction suggests.";
 
+  const refinementContext = isRefinement 
+    ? "\nNote: This is a refinement of a previous AI output. The user found the previous version lacking. Specifically address the feedback provided."
+    : "";
+
   const keywordPrompt = keywords ? `\nIncorporate these keywords seamlessly into the prose: ${keywords}` : "";
 
-  const prompt = `Original Text: "${currentContent}"
+  const prompt = `Text to improve: "${currentContent}"
   
-  Requested Changes: "${instruction}"
-  Rewrite Level: ${levelText}${keywordPrompt}
+  Feedback/Instruction: "${instruction}"
+  Rewrite Level: ${levelText}${keywordPrompt}${refinementContext}
   
   Provide only the improved Bengali text without any introduction or concluding remarks.`;
 
@@ -68,8 +73,8 @@ export const regenerateSection = async (
       model: modelName,
       contents: prompt,
       config: {
-        systemInstruction: "You are a professional Bengali editor and master of prose. Your edits improve flow, imagery, and emotional impact.",
-        temperature: changeLevel === ChangeLevel.MAJOR ? 0.95 : 0.5,
+        systemInstruction: "You are a professional Bengali editor and master of prose. Your edits improve flow, imagery, and emotional impact based on specific user feedback.",
+        temperature: changeLevel === ChangeLevel.MAJOR ? 0.95 : 0.4,
       },
     });
 
