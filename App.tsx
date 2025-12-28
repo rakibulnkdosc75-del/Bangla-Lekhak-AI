@@ -23,10 +23,13 @@ import {
   ChevronUp,
   ChevronDown,
   MessageSquareQuote,
-  X
+  X,
+  FastForward,
+  Wand2,
+  Dices
 } from 'lucide-react';
 import { StoryGenre, StoryLength, ChangeLevel, RegenTarget } from './types';
-import { generateBengaliStory, regenerateSection } from './services/geminiService';
+import { generateBengaliStory, regenerateSection, continueStory } from './services/geminiService';
 import { exportToPdf, exportToWord, exportToTxt } from './utils/exportUtils';
 
 const STORAGE_KEY = 'bangla_lekhak_draft_v3';
@@ -37,12 +40,17 @@ const QUICK_FEEDBACKS = [
   { label: 'ভাষা সহজ', value: 'ভাষা আরও সহজ এবং সাবলীল করো' },
   { label: 'নাটকীয়', value: 'আরও নাটকীয়তা এবং উত্তেজনা বাড়াও' },
   { label: 'আবেগপ্রবণ', value: 'আবেগ এবং অনুভূতির ওপর জোর দাও' },
-  { label: 'সংলাপ যোগ', value: 'সংলাপ বা কথোপকথন বাড়িয়ে দাও' }
+  { label: 'সংলাপ যোগ', value: 'সংলাপ বা কথোপকথন বাড়িয়ে দাও' },
+  { label: 'আরও অ্যাকশন', value: 'গল্পে আরও অ্যাকশন এবং রোমাঞ্চ যোগ করো' },
+  { label: 'সংলাপ কমানো', value: 'সংলাপ কমিয়ে বর্ণনার ওপর জোর দাও' },
+  { label: 'গতি বৃদ্ধি', value: 'গল্পের গতিশীলতা ও পেসিং (pacing) আরও উন্নত করো' },
+  { label: 'গভীরতা বাড়ানো', value: 'চরিত্রের মনস্তাত্ত্বিক গভীরতা আরও স্পষ্টভাবে ফুটিয়ে তোলো' }
 ];
 
 const App: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [isRegenerating, setIsRegenerating] = useState(false);
+  const [isContinuing, setIsContinuing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [title, setTitle] = useState('');
@@ -57,6 +65,7 @@ const App: React.FC = () => {
   
   // Refinement states
   const [regenInstruction, setRegenInstruction] = useState('');
+  const [continueInstruction, setContinueInstruction] = useState('');
   const [keywords, setKeywords] = useState('');
   const [changeLevel, setChangeLevel] = useState<ChangeLevel>(ChangeLevel.SLIGHT);
   const [regenTarget, setRegenTarget] = useState<RegenTarget>(RegenTarget.SELECTION);
@@ -98,7 +107,6 @@ const App: React.FC = () => {
         const { title: sTitle, content: sContent } = JSON.parse(saved);
         setTitle(sTitle || '');
         setContent(sContent || '');
-        // Set initial DOM state
         if (editorRef.current) {
           editorRef.current.innerText = sContent || '';
         }
@@ -207,6 +215,22 @@ const App: React.FC = () => {
       alert("দুঃখিত, কোনো সমস্যা হয়েছে। আবার চেষ্টা করুন।");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleContinue = async () => {
+    if (!content.trim()) return;
+    setIsContinuing(true);
+    try {
+      const addition = await continueStory(content, continueInstruction, { prompt, genre, length, tone });
+      const updatedContent = content.trim() + "\n\n" + addition.trim();
+      updateEditorDOM(updatedContent);
+      pushToHistory(updatedContent);
+      setContinueInstruction('');
+    } catch (error) {
+      alert("গল্প চালিয়ে যেতে সমস্যা হয়েছে।");
+    } finally {
+      setIsContinuing(false);
     }
   };
 
@@ -441,7 +465,7 @@ const App: React.FC = () => {
           <div className="flex-1 flex flex-col relative overflow-hidden bg-white">
             <div 
               className="flex-1 p-4 md:p-12 overflow-y-auto scroll-smooth"
-              style={{ paddingBottom: showControls ? '380px' : '80px' }}
+              style={{ paddingBottom: showControls ? '480px' : '80px' }}
             >
               <div 
                 ref={editorRef}
@@ -464,7 +488,7 @@ const App: React.FC = () => {
               )}
             </div>
 
-            {/* AI Refinement Panel */}
+            {/* AI Controls Panel */}
             {content && (
               <div 
                 ref={panelRef}
@@ -474,84 +498,105 @@ const App: React.FC = () => {
               >
                 <div className="m-4 md:m-6 p-4 md:p-6 bg-white/95 backdrop-blur-xl border border-indigo-100 rounded-3xl shadow-[0_-20px_50px_-20px_rgba(79,70,229,0.3)]">
                   <div className="flex flex-col gap-4">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                         <div className={`w-2 h-2 rounded-full ${lastActionWasRegen ? 'bg-orange-500' : 'bg-indigo-500'} animate-pulse`}></div>
-                         <span className="text-[11px] font-black text-indigo-600 uppercase tracking-tighter bn-font">
-                            {lastActionWasRegen ? 'পুনরায় পরিমার্জন' : 'এআই পরিমার্জন প্যানেল'}
-                         </span>
+                    {/* Header */}
+                    <div className="flex items-center justify-between border-b border-gray-100 pb-3">
+                      <div className="flex gap-4">
+                        <button className="flex items-center gap-2 text-indigo-600 font-black text-xs uppercase bn-font">
+                          <Wand2 className="w-4 h-4" /> এআই কন্ট্রোল সেন্টার
+                        </button>
                       </div>
-                      <button onClick={() => setShowControls(false)} className="p-1.5 hover:bg-gray-100 rounded-lg text-gray-400 transition-colors">
+                      <button onClick={() => setShowControls(false)} className="p-1.5 hover:bg-gray-100 rounded-lg text-gray-400">
                         <ChevronDown className="w-4 h-4" />
                       </button>
                     </div>
 
-                    <div className="flex flex-col gap-2">
-                       <span className="text-[9px] text-gray-400 font-bold uppercase bn-font flex items-center gap-1">
-                         <MessageSquareQuote className="w-3 h-3" /> দ্রুত ফিডব্যাক
-                       </span>
-                       <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar">
-                         {QUICK_FEEDBACKS.map(fb => (
-                           <button 
-                             key={fb.label}
-                             onClick={() => {
-                               setRegenInstruction(fb.value);
-                               handleRegenerate(fb.value);
-                             }}
-                             className="whitespace-nowrap px-3 py-1.5 bg-indigo-50/50 hover:bg-indigo-100 text-indigo-600 text-[10px] font-bold rounded-lg border border-indigo-100 transition-all"
-                           >
-                             {fb.label}
-                           </button>
-                         ))}
-                       </div>
-                    </div>
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                      {/* Left Side: Refinement & Common Feedback */}
+                      <div className="space-y-4 pr-0 lg:pr-6 lg:border-r lg:border-gray-100">
+                        <div className="flex flex-col gap-3">
+                          <span className="text-[9px] text-gray-400 font-bold uppercase bn-font flex items-center gap-1.5">
+                            <MessageSquareQuote className="w-3.5 h-3.5" /> দ্রুত ফিডব্যাক অপশন
+                          </span>
+                          <div className="flex flex-wrap gap-2">
+                            {QUICK_FEEDBACKS.map(fb => (
+                              <button 
+                                key={fb.label}
+                                onClick={() => {
+                                  setRegenInstruction(fb.value);
+                                  handleRegenerate(fb.value);
+                                }}
+                                className="whitespace-nowrap px-3 py-1.5 bg-indigo-50/50 hover:bg-indigo-600 hover:text-white text-indigo-600 text-[10px] font-bold rounded-xl border border-indigo-100 transition-all active:scale-95 flex items-center gap-1.5"
+                              >
+                                {fb.label}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
 
-                    <div className="flex flex-wrap items-center justify-between gap-4">
-                      <div className="flex flex-col gap-1.5">
-                         <span className="text-[9px] text-gray-400 font-bold uppercase bn-font">টার্গেট</span>
-                         <div className="flex bg-gray-100/50 p-1 rounded-xl">
-                           <button onClick={() => setRegenTarget(RegenTarget.SELECTION)} className={`px-3 py-1.5 rounded-lg text-[10px] font-bold transition-all ${regenTarget === RegenTarget.SELECTION ? 'bg-white text-indigo-600 shadow-sm' : 'text-gray-500'}`}>সিলেকশন</button>
-                           <button onClick={() => setRegenTarget(RegenTarget.PARAGRAPH)} className={`px-3 py-1.5 rounded-lg text-[10px] font-bold transition-all ${regenTarget === RegenTarget.PARAGRAPH ? 'bg-white text-indigo-600 shadow-sm' : 'text-gray-500'}`}>প্যারাগ্রাফ</button>
-                           <button onClick={() => setRegenTarget(RegenTarget.ALL)} className={`px-3 py-1.5 rounded-lg text-[10px] font-bold transition-all ${regenTarget === RegenTarget.ALL ? 'bg-white text-indigo-600 shadow-sm' : 'text-gray-500'}`}>সম্পূর্ণ</button>
-                         </div>
+                        <div className="flex flex-wrap items-center justify-between gap-4 pt-2">
+                          <div className="flex flex-col gap-1.5">
+                            <span className="text-[9px] text-gray-400 font-bold uppercase bn-font">টার্গেট এলাকা</span>
+                            <div className="flex bg-gray-100/50 p-1 rounded-2xl">
+                              <button onClick={() => setRegenTarget(RegenTarget.SELECTION)} className={`px-4 py-2 rounded-xl text-[10px] font-bold transition-all ${regenTarget === RegenTarget.SELECTION ? 'bg-white text-indigo-600 shadow-sm border border-indigo-50' : 'text-gray-500'}`}>সিলেকশন</button>
+                              <button onClick={() => setRegenTarget(RegenTarget.PARAGRAPH)} className={`px-4 py-2 rounded-xl text-[10px] font-bold transition-all ${regenTarget === RegenTarget.PARAGRAPH ? 'bg-white text-indigo-600 shadow-sm border border-indigo-50' : 'text-gray-500'}`}>প্যারাগ্রাফ</button>
+                              <button onClick={() => setRegenTarget(RegenTarget.ALL)} className={`px-4 py-2 rounded-xl text-[10px] font-bold transition-all ${regenTarget === RegenTarget.ALL ? 'bg-white text-indigo-600 shadow-sm border border-indigo-50' : 'text-gray-500'}`}>সম্পূর্ণ</button>
+                            </div>
+                          </div>
+                          <div className="flex flex-col gap-1.5">
+                            <span className="text-[9px] text-gray-400 font-bold uppercase bn-font">পরিবর্তন মাত্রা</span>
+                            <div className="flex bg-gray-100/50 p-1 rounded-2xl">
+                              <button onClick={() => setChangeLevel(ChangeLevel.SLIGHT)} className={`px-4 py-2 rounded-xl text-[10px] font-bold transition-all ${changeLevel === ChangeLevel.SLIGHT ? 'bg-white text-indigo-600 shadow-sm border border-indigo-50' : 'text-gray-500'}`}>সামান্য</button>
+                              <button onClick={() => setChangeLevel(ChangeLevel.MAJOR)} className={`px-4 py-2 rounded-xl text-[10px] font-bold transition-all ${changeLevel === ChangeLevel.MAJOR ? 'bg-white text-indigo-600 shadow-sm border border-indigo-50' : 'text-gray-500'}`}>আমূল</button>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="flex gap-2">
+                          <input 
+                            type="text"
+                            value={regenInstruction}
+                            onChange={(e) => setRegenInstruction(e.target.value)}
+                            placeholder="এখানে আপনার নিজস্ব নির্দেশনা লিখুন..."
+                            className="flex-1 px-4 py-3 bg-gray-50/50 border border-gray-100 rounded-2xl focus:ring-2 focus:ring-indigo-500 transition-all outline-none text-xs bn-font shadow-inner"
+                          />
+                          <button 
+                            onClick={() => handleRegenerate()}
+                            disabled={isRegenerating || !regenInstruction.trim()}
+                            className="bg-indigo-600 text-white p-3.5 rounded-2xl shadow-lg active:scale-95 disabled:opacity-50 transition-all hover:bg-indigo-700"
+                            title="Apply Feedback"
+                          >
+                            {isRegenerating ? <Loader2 className="w-5 h-5 animate-spin" /> : <RefreshCw className="w-5 h-5" />}
+                          </button>
+                        </div>
                       </div>
-                      <div className="flex flex-col gap-1.5">
-                         <span className="text-[9px] text-gray-400 font-bold uppercase bn-font">তীব্রতা</span>
-                         <div className="flex bg-gray-100/50 p-1 rounded-xl">
-                           <button onClick={() => setChangeLevel(ChangeLevel.SLIGHT)} className={`px-3 py-1.5 rounded-lg text-[10px] font-bold transition-all ${changeLevel === ChangeLevel.SLIGHT ? 'bg-white text-indigo-600 shadow-sm' : 'text-gray-500'}`}>সামান্য</button>
-                           <button onClick={() => setChangeLevel(ChangeLevel.MAJOR)} className={`px-3 py-1.5 rounded-lg text-[10px] font-bold transition-all ${changeLevel === ChangeLevel.MAJOR ? 'bg-white text-indigo-600 shadow-sm' : 'text-gray-500'}`}>আমূল</button>
-                         </div>
+
+                      {/* Right Side: Continue Story */}
+                      <div className="space-y-5 lg:pl-2">
+                        <span className="text-[9px] text-orange-500 font-bold uppercase bn-font flex items-center gap-1.5">
+                          <FastForward className="w-3.5 h-3.5" /> কাহিনী বিস্তার (Continuation)
+                        </span>
+                        <div className="p-4 bg-orange-50/50 border border-orange-100 rounded-2xl space-y-3 shadow-sm">
+                          <p className="text-[10px] text-orange-700/70 bn-font leading-relaxed font-medium">
+                            গল্পের প্রবাহ বজায় রেখে নতুন অংশ যোগ করুন। আপনি চাইলে নির্দিষ্ট কোনো মোড় (plot twist) সম্পর্কে এআই-কে সংকেত দিতে পারেন।
+                          </p>
+                          <textarea 
+                            value={continueInstruction}
+                            onChange={(e) => setContinueInstruction(e.target.value)}
+                            placeholder="পরবর্তী অংশ কেমন হবে? (উদা: 'একটি রহস্যময় চিঠি আসবে')"
+                            rows={3}
+                            className="w-full px-4 py-3 bg-white border border-orange-100 rounded-2xl focus:ring-2 focus:ring-orange-500 transition-all outline-none text-xs bn-font resize-none shadow-sm"
+                          />
+                        </div>
+                        <button 
+                          onClick={handleContinue}
+                          disabled={isContinuing || !content.trim()}
+                          className="w-full bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 text-white font-black py-4 rounded-2xl transition-all shadow-xl shadow-orange-100 active:scale-[0.98] disabled:opacity-50 flex items-center justify-center gap-3 border-b-4 border-orange-800"
+                        >
+                          {isContinuing ? <Loader2 className="w-5 h-5 animate-spin" /> : <FastForward className="w-5 h-5" />}
+                          <span className="bn-font text-base">গল্প এগিয়ে নিয়ে যান</span>
+                        </button>
                       </div>
                     </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                      <div className="md:col-span-2">
-                        <input 
-                          type="text"
-                          value={regenInstruction}
-                          onChange={(e) => setRegenInstruction(e.target.value)}
-                          placeholder="নির্দেশনা লিখুন..."
-                          className="w-full px-4 py-3 bg-gray-50/50 border border-gray-100 rounded-2xl focus:ring-2 focus:ring-indigo-500 transition-all outline-none text-xs bn-font"
-                          onKeyDown={(e) => e.key === 'Enter' && handleRegenerate()}
-                        />
-                      </div>
-                      <input 
-                        type="text"
-                        value={keywords}
-                        onChange={(e) => setKeywords(e.target.value)}
-                        placeholder="কীওয়ার্ড..."
-                        className="w-full px-4 py-3 bg-gray-50/50 border border-gray-100 rounded-2xl focus:ring-2 focus:ring-indigo-500 transition-all outline-none text-xs bn-font"
-                      />
-                    </div>
-
-                    <button 
-                      onClick={() => handleRegenerate()}
-                      disabled={isRegenerating || !regenInstruction.trim()}
-                      className={`w-full ${lastActionWasRegen ? 'bg-orange-600' : 'bg-indigo-600'} text-white font-black py-4 rounded-2xl transition-all shadow-lg active:scale-[0.98] disabled:opacity-50 flex items-center justify-center gap-3`}
-                    >
-                      {isRegenerating ? <Loader2 className="w-5 h-5 animate-spin" /> : <RefreshCw className="w-5 h-5" />}
-                      <span className="bn-font text-base">{lastActionWasRegen ? 'ঠিক করুন' : 'কার্যকর করুন'}</span>
-                    </button>
                   </div>
                 </div>
               </div>
@@ -560,9 +605,9 @@ const App: React.FC = () => {
             {content && !showControls && (
               <button 
                 onClick={() => editorRef.current?.focus()}
-                className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-white/80 backdrop-blur-md px-4 py-2 rounded-full border border-indigo-100 shadow-lg text-[10px] font-bold text-indigo-600 flex items-center gap-2 hover:bg-white transition-all z-20"
+                className="absolute bottom-6 left-1/2 -translate-x-1/2 bg-white/90 backdrop-blur-md px-6 py-3 rounded-full border border-indigo-100 shadow-2xl text-[11px] font-black text-indigo-600 flex items-center gap-2.5 hover:bg-white hover:-translate-y-1 transition-all z-20 group"
               >
-                <Sparkles className="w-3 h-3" /> টুলস খুলুন <ChevronUp className="w-3 h-3" />
+                <Sparkles className="w-4 h-4 group-hover:animate-spin-slow" /> স্মার্ট কন্ট্রোল ও কন্টিনিউ <ChevronUp className="w-4 h-4" />
               </button>
             )}
           </div>
@@ -570,33 +615,52 @@ const App: React.FC = () => {
 
         {/* Installation Guide Modal */}
         {showInstallGuide && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-            <div className="bg-white rounded-3xl p-8 max-w-sm w-full shadow-2xl relative">
-              <button onClick={() => setShowInstallGuide(false)} className="absolute top-4 right-4 text-gray-400 hover:text-gray-600">
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
+            <div className="bg-white rounded-[2rem] p-10 max-w-sm w-full shadow-2xl relative border border-gray-100">
+              <button onClick={() => setShowInstallGuide(false)} className="absolute top-6 right-6 text-gray-300 hover:text-gray-500 transition-colors">
                 <X className="w-6 h-6" />
               </button>
               <div className="text-center">
-                <Smartphone className="w-16 h-16 text-indigo-600 mx-auto mb-4" />
-                <h3 className="text-xl font-bold mb-4 bn-font">সরাসরি ফোনে ইনস্টল করুন</h3>
+                <div className="bg-indigo-50 w-20 h-20 rounded-3xl flex items-center justify-center mx-auto mb-6 shadow-sm">
+                  <Smartphone className="w-10 h-10 text-indigo-600" />
+                </div>
+                <h3 className="text-2xl font-black mb-4 bn-font text-gray-900">অ্যাপটি ইনস্টল করুন</h3>
                 <div className="text-left space-y-4 text-sm text-gray-600 bn-font leading-relaxed">
-                  <p>এই অ্যাপটি এন্ড্রয়েড বা আইফোনে ব্যবহার করতে:</p>
-                  <ol className="list-decimal list-inside space-y-2">
-                    <li>ব্রাউজারের মেনু বাটনে (৩টি ডট বা শেয়ার আইকন) ক্লিক করুন।</li>
-                    <li><strong>"Add to Home Screen"</strong> বা <strong>"Install App"</strong> সিলেক্ট করুন।</li>
-                    <li>ব্যাস! এখন এটি একটি রিয়েল অ্যাপের মতো কাজ করবে।</li>
+                  <p>আপনার মোবাইল ডিভাইসে সরাসরি এই অ্যাপটি ব্যবহার করতে নিচের ধাপগুলো অনুসরণ করুন:</p>
+                  <ol className="list-decimal list-inside space-y-3 font-medium">
+                    <li className="pl-2 border-l-2 border-indigo-100">ব্রাউজারের <span className="text-indigo-600">শেয়ার</span> বা <span className="text-indigo-600">মেনু</span> আইকনে চাপ দিন।</li>
+                    <li className="pl-2 border-l-2 border-indigo-100"><strong>"Add to Home Screen"</strong> বা <strong>"Install App"</strong> খুঁজে বের করুন।</li>
+                    <li className="pl-2 border-l-2 border-indigo-100">অ্যাড বাটনে ক্লিক করলেই আপনার ফোনে অ্যাপটি চলে আসবে।</li>
                   </ol>
                 </div>
-                <button onClick={() => setShowInstallGuide(false)} className="mt-8 w-full py-3 bg-indigo-600 text-white rounded-xl font-bold bn-font">ঠিক আছে</button>
+                <button onClick={() => setShowInstallGuide(false)} className="mt-10 w-full py-4 bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl font-black bn-font transition-all shadow-lg active:scale-95">বুঝেছি</button>
               </div>
             </div>
           </div>
         )}
 
-        <footer className="mt-8 text-center text-[10px] text-gray-400 bn-font mb-8">
-          বাংলা লেখক AI v3.5 • প্রফেশনাল রাইটিং টুল • {new Date().getFullYear()}
+        <footer className="mt-8 text-center text-[10px] text-gray-400 bn-font mb-10 select-none">
+          <div className="flex items-center justify-center gap-3 mb-2 opacity-50">
+            <Sparkles className="w-3 h-3" />
+            <div className="h-px w-20 bg-gray-200"></div>
+            <BookOpen className="w-3 h-3" />
+            <div className="h-px w-20 bg-gray-200"></div>
+            <Zap className="w-3 h-3" />
+          </div>
+          বাংলা লেখক AI v3.7 • প্রফেশনাল সাহিত্যিক এআই টুল • {new Date().getFullYear()}
         </footer>
       </main>
-      <style>{`.no-scrollbar::-webkit-scrollbar { display: none; } .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }`}</style>
+      <style>{`
+        .no-scrollbar::-webkit-scrollbar { display: none; } 
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        @keyframes spin-slow {
+          from { transform: rotate(0deg); }
+          to { transform: rotate(360deg); }
+        }
+        .animate-spin-slow {
+          animation: spin-slow 8s linear infinite;
+        }
+      `}</style>
     </div>
   );
 };

@@ -87,3 +87,39 @@ export const regenerateSection = async (
     throw error;
   }
 };
+
+export const continueStory = async (
+  currentStory: string,
+  instruction: string,
+  config: GenerationConfig
+) => {
+  const ai = getAIClient();
+  const modelName = 'gemini-3-pro-preview';
+
+  const prompt = `This is an ongoing Bengali ${config.genre} story:
+  ---
+  ${currentStory}
+  ---
+  Please write the next segment of this story.
+  Direction for continuation: ${instruction || "গল্পের স্বাভাবিক গতি বজায় রেখে এগিয়ে যাও"}
+  Tone: ${config.tone}
+  Language: Standard Bengali.
+  
+  Continue the narrative naturally, maintaining character voices and atmospheric details. Output only the new text.`;
+
+  try {
+    const response = await ai.models.generateContent({
+      model: modelName,
+      contents: prompt,
+      config: {
+        systemInstruction: "You are a master Bengali novelist. You excel at maintaining narrative tension and character consistency in long-form fiction.",
+        temperature: 0.8,
+      },
+    });
+
+    return response.text;
+  } catch (error) {
+    console.error("Error continuing story:", error);
+    throw error;
+  }
+};
